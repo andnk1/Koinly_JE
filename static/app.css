@@ -1,0 +1,39 @@
+/* app.css -- Koinly JE app-specific styles, built only from style.css's
+   shared variables (--navy/--green/--teal/--grey/--cardbg/--ink). */
+
+input[type=number], input[type=text] {
+  width: 100%; max-width: 220px; padding: 8px 10px; background: #fff;
+  border: 1px solid var(--grey); border-radius: 6px; font-size: .95rem;
+  color: var(--ink);
+}
+
+.field-desc {
+  font-size: .78rem; color: #6b7280; margin: 6px 0 0; line-height: 1.4;
+}
+
+.mapping-row {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px;
+}
+.mapping-row > .mapping-upload { flex: 1 1 260px; }
+.mapping-row > .mapping-download {
+  flex: 0 0 auto; padding-top: 24px;
+}
+
+.summary-line {
+  font-size: .95rem; color: var(--ink); margin: 0 0 16px;
+}
+.summary-line strong { color: #003366; }
+
+.tie-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: .78rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.tie-badge.ok { background: #eaf3f1; color: var(--green); }
+.tie-badge.bad { background: #fdf0f0; color: #8b0000; }
+
+.run-again {
+  display: inline-block; margin-top: 22px; font-size: .85rem;
+  color: var(--teal); text-decoration: none; font-weight: 600;
+}
+.run-again:hover { text-decoration: underline; }

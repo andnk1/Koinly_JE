@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Koinly JE Tool</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>Koinly &rarr; QuickBooks JE</h1>
+    <p class="subtitle">
+      Upload a Koinly transaction history export and get back QuickBooks-ready
+      journal entries &mdash; mapped to your GL accounts and reconciled against
+      your real balances.
+    </p>
+
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form action="{{ url_for('run') }}" method="post" enctype="multipart/form-data">
+
+      <div class="card">
+        <div class="cardhead">Transaction History</div>
+        <div class="cardbody">
+          <label for="txn_files">Koinly Transaction History CSV(s)</label>
+          <input type="file" id="txn_files" name="txn_files" accept=".csv" multiple required>
+          <p class="field-desc">
+            Your raw Koinly <code>transaction_history</code> export(s) for the period
+            &mdash; the file straight out of Koinly, not a re-saved or edited copy.
+            You can select more than one file (e.g. separate exports per quarter)
+            and they'll be combined into one report.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardhead">GL Account Mapping</div>
+        <div class="cardbody">
+          <div class="mapping-row">
+            <div class="mapping-upload">
+              <label for="mapping_file">Mapping File (optional)</label>
+              <input type="file" id="mapping_file" name="mapping_file" accept=".csv,.xlsx,.xlsm">
+              <p class="field-desc">
+                Maps each Koinly Tag/category (e.g. "Reward", "Cost", "Loan") to your
+                real QuickBooks GL account. Two columns: <strong>Label</strong> and
+                <strong>Account Name</strong>. Leave this blank to skip mapping &mdash;
+                the report's GL Account column will just be empty for every line.
+              </p>
+            </div>
+            <div class="mapping-download">
+              <a class="btn" href="{{ url_for('mapping_template') }}">Download mapping template (.csv)</a>
+              <p class="field-desc">Download, fill in the Account Name column, then upload it on the left.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardhead">Reconciliation (Optional)</div>
+        <div class="cardbody">
+          <div class="row2">
+            <div>
+              <label for="beginning">Beginning Balance</label>
+              <input type="text" inputmode="decimal" id="beginning" name="beginning" placeholder="0.00">
+              <p class="field-desc">
+                Your wallet/exchange balance at the very start of the period, from your
+                own records (e.g. Koinly's or the exchange's statement). Optional &mdash;
+                leave blank to treat it as 0.00; the report still runs either way.
+              </p>
+            </div>
+            <div>
+              <label for="ending">Ending Balance</label>
+              <input type="text" inputmode="decimal" id="ending" name="ending" placeholder="0.00">
+              <p class="field-desc">
+                The same balance at the end of the period. Optional &mdash; leave blank
+                to treat it as 0.00. The Reconciliation tab compares this to what the
+                transactions themselves calculate, and flags any difference.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardhead">Run</div>
+        <div class="cardbody">
+          <button type="submit">Generate JE Report</button>
+          <p class="field-desc">
+            Produces one Excel workbook (Reconciliation, JE by Month, and Total JE tabs)
+            plus a separate QB_JE.csv ready to import into QuickBooks.
+          </p>
+        </div>
+      </div>
+
+    </form>
+
+    <p class="disclaimer">
+      Nothing you upload is stored &mdash; files are processed in memory for this
+      run only, and the generated report is held just long enough for you to
+      download it.
+    </p>
+  </div>
+</body>
+</html>

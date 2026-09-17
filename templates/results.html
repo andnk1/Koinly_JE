@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Koinly JE Tool &mdash; Report Ready</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>Your JE Report is Ready</h1>
+    <p class="subtitle">Review the flags below, then download your files.</p>
+
+    <p class="summary-line">
+      Processed <strong>{{ result.total_transactions }}</strong> transaction(s)
+      across <strong>{{ result.n_files }}</strong> file(s) &mdash;
+      <strong>{{ result.monthly_records|length }}</strong> JE line(s) by month,
+      <strong>{{ result.total_records|length }}</strong> line(s) in the period total.
+      {% if result.reconciliation.difference == 0 %}
+        <span class="tie-badge ok">Ties out</span>
+      {% else %}
+        <span class="tie-badge bad">Difference: {{ "%.2f"|format(result.reconciliation.difference) }}</span>
+      {% endif %}
+    </p>
+
+    {% if result.unmapped_accounts %}
+      <div class="warn">
+        <strong>No GL Account mapping for {{ result.unmapped_accounts|length }} categor{{ 'y' if result.unmapped_accounts|length == 1 else 'ies' }}:</strong>
+        {{ result.unmapped_accounts|join(', ') }}.
+        The GL Account column is blank for these lines (QB_JE.csv falls back to the raw
+        category name). Add a Label/Account Name row for each to your mapping file and
+        run this again.
+      </div>
+    {% endif %}
+
+    {% if result.unmapped_types %}
+      <div class="warn">
+        <strong>Unusual transaction type(s) seen:</strong> {{ result.unmapped_types|join(', ') }}.
+        These use best-effort logic that hasn't been validated against real examples yet
+        &mdash; worth double-checking those lines.
+      </div>
+    {% endif %}
+
+    {% if blank_tag_review %}
+      <div class="warn">
+        <strong>Blank-Tag transactions</strong> (posted under their transaction type
+        instead of a Koinly Tag, still included in the report):
+        <div class="checklist">
+          {% for key, amounts in blank_tag_review %}
+            <div class="chk">{{ key[0] }} &mdash; {{ key[1] }} / {{ key[2] }}: {{ amounts.count|int }} txn(s), net value {{ "%.2f"|format(amounts.amount) }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if result.skipped_no_date %}
+      <div class="warn">
+        <strong>{{ result.skipped_no_date }} row(s) skipped</strong> &mdash; no Date value, so they
+        couldn't be assigned to a month.
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="cardhead">Download</div>
+      <div class="cardbody">
+        <div class="dl">
+          <a class="btn" href="{{ url_for('download_xlsx', token=token) }}">Download report (.xlsx)</a>
+          <a class="btn" href="{{ url_for('download_csv', token=token) }}">Download QB Journal Entry (.csv)</a>
+        </div>
+        <p class="field-desc">
+          The workbook has three tabs &mdash; Reconciliation, JE by Month, and Total JE.
+          QB_JE.csv is the file you actually import into QuickBooks; it stays a CSV in
+          QuickBooks' own import layout.
+        </p>
+      </div>
+    </div>
+
+    <a class="run-again" href="{{ url_for('index') }}">&larr; Run another report</a>
+  </div>
+</body>
+</html>
