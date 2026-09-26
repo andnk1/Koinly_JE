@@ -10,12 +10,19 @@ it back in as their mapping file.
 import csv
 import io
 
-# Labels from Mapping_Sample.xlsx (C:\dev\Koily_JE), in the same order.
+# Labels in the same order as the user's Mapping_Template.csv.
 LABELS = [
+    # Optional overrides for the two built-in accounts -- leave blank to keep
+    # "Digital Asset" / "Capital Gain/Loss".
+    "Default Digital Asset Account",
+    "Default Capital Gain/Loss Account",
     "Airdrop",
     "Buy",
     "Cost",
+    "Crypto_Deposit",
+    "Crypto_Withdrawal",
     "Exchange",
+    "Fee refund",
     "Fiat_Deposit",
     "Fiat_Withdrawal",
     "From Pool",
@@ -38,10 +45,6 @@ LABELS = [
     "Sell",
     "To Pool",
     "Transfer",
-    # Blank-tag fallbacks the engine can also emit (see koinly_engine.py) --
-    # included here since Mapping_Sample.xlsx doesn't have a row for them yet.
-    "Crypto_Deposit",
-    "Crypto_Withdrawal",
 ]
 
 

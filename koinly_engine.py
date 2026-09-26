@@ -26,6 +26,20 @@ ROUND = 2
 # the GL Account column.
 FIXED_ACCOUNTS = {DIGITAL_ASSETS, CAPITAL_GAIN_LOSS, CASH}
 
+# Optional mapping-file rows that override the GL account used for the two
+# built-in accounts. If the row is missing or its Account Name is blank, the
+# built-in name ("Digital Asset" / "Capital Gain/Loss") is used as before.
+DEFAULT_ACCOUNT_LABELS = {
+    DIGITAL_ASSETS: "default digital asset account",
+    CAPITAL_GAIN_LOSS: "default capital gain/loss account",
+}
+
+# Only these blank-Tag transaction types are listed in the "Blank-Tag
+# transactions" review box, and only when their net value is > 0. Buy/Sell
+# (same as exchanges), Fiat_Deposit/Fiat_Withdrawal and zero-value rows are
+# left out of the review list (they are still posted in the JE as before).
+BLANK_TAG_REVIEW_TYPES = {"crypto_deposit", "crypto_withdrawal"}
+
 # Order in which category groups appear within a period; each group is then
 # sorted largest-dollar-amount first.
 TYPE_ORDER = [
@@ -176,6 +190,9 @@ def load_mapping_bytes(filename, content_bytes):
 
 
 def gl_account_for(acct, mapping, unmapped_seen):
+    if acct in DEFAULT_ACCOUNT_LABELS:
+        override = mapping.get(DEFAULT_ACCOUNT_LABELS[acct], "")
+        return override if override else acct
     if acct in FIXED_ACCOUNTS:
         return acct
     gl = mapping.get(acct.strip().lower())
@@ -234,8 +251,8 @@ def process_rows(rows, ledger, unmapped_types_seen):
                    net_value=net_value, sent_amt=sent_amt, recv_amt=recv_amt,
                    count=1)
 
-        if typ not in ("exchange", "transfer") and not tag:
-            ledger.flag(m, typ or "(blank type)", cat, amount=net_value)
+        if not tag and typ in BLANK_TAG_REVIEW_TYPES and round(net_value, ROUND) > 0:
+            ledger.flag(m, typ, cat, amount=net_value)
 
         if typ in ("buy", "sell", "fiat_deposit", "fiat_withdrawal"):
             unmapped_types_seen.add(typ)

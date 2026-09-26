@@ -44,8 +44,9 @@
 
     {% if blank_tag_review %}
       <div class="warn">
-        <strong>Blank-Tag transactions</strong> (posted under their transaction type
-        instead of a Koinly Tag, still included in the report):
+        <strong>Blank-Tag transactions</strong> &mdash; Crypto_Deposit / Crypto_Withdrawal
+        with no Koinly Tag and a net value above 0 (posted under their transaction type,
+        still included in the report):
         <div class="checklist">
           {% for key, amounts in blank_tag_review %}
             <div class="chk">{{ key[0] }} &mdash; {{ key[1] }} / {{ key[2] }}: {{ amounts.count|int }} txn(s), net value {{ "%.2f"|format(amounts.amount) }}</div>
