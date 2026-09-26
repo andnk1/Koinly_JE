@@ -42,6 +42,18 @@
       </div>
     {% endif %}
 
+    {% if result.adjustments %}
+      <div class="warn">
+        <strong>Balancing adjustments added</strong> &mdash; these months' debits and credits
+        didn't match, so a last line was posted to Digital Asset (memo "Adjustment - YYYY-MM"):
+        <div class="checklist">
+          {% for period, diff in result.adjustments %}
+            <div class="chk">{{ period }}: {{ "%.2f"|format(diff|abs) }} {{ 'Credit' if diff > 0 else 'Debit' }} to Digital Asset</div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
     {% if blank_tag_review %}
       <div class="warn">
         <strong>Blank-Tag transactions</strong> &mdash; Crypto_Deposit / Crypto_Withdrawal

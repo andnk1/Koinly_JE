@@ -357,6 +357,28 @@ def emit_records(items, period_label, je_date, je_no, mapping, unmapped_accounts
     return records
 
 
+def balance_je(records, je_date, je_no, label, mapping, unmapped_accounts_seen):
+    """If this JE's debits and credits don't match (e.g. a Buy whose cost
+    basis differs from the cash paid, an unrecognised type that posts one
+    side only, or penny rounding), append ONE last line to Digital Asset for
+    the difference -- a Credit if debits are higher, a Debit if credits are
+    higher -- with memo "Adjustment - <label>". Returns the adjustment
+    amount (debit minus credit before the fix; 0.0 if it already balanced)."""
+    diff = round(sum(r["debit"] for r in records) - sum(r["credit"] for r in records), ROUND)
+    if not diff:
+        return 0.0
+    records.append({
+        "je_date": je_date, "je_no": je_no,
+        "acct": DIGITAL_ASSETS,
+        "gl": gl_account_for(DIGITAL_ASSETS, mapping, unmapped_accounts_seen),
+        "debit": -diff if diff < 0 else 0.0,
+        "credit": diff if diff > 0 else 0.0,
+        "memo": f"Adjustment - {label}", "name": "",
+        "adjustment": True,
+    })
+    return diff
+
+
 def combine_all_groups(ledger):
     combined = defaultdict(lambda: defaultdict(float))
     months = set()
@@ -374,7 +396,9 @@ def records_to_je_rows(records):
              r["memo"], r["name"]] for r in records]
 
 
-def build_monthly_records(ledger, mapping, unmapped_accounts_seen):
+def build_monthly_records(ledger, mapping, unmapped_accounts_seen, adjustments=None):
+    """adjustments: optional list; each month that needed a balancing line
+    gets appended as (period_label, debit_minus_credit_before_fix)."""
     by_month = defaultdict(list)
     for (m, typ, cat), g in ledger.groups.items():
         by_month[m].append((typ, cat, g))
@@ -384,9 +408,11 @@ def build_monthly_records(ledger, mapping, unmapped_accounts_seen):
         year, mon = int(m[:4]), int(m[5:7])
         je_date = month_end(year, mon)
         je_no = f"JE-{m}"
-        all_records.extend(
-            emit_records(by_month[m], m, je_date, je_no, mapping, unmapped_accounts_seen)
-        )
+        recs = emit_records(by_month[m], m, je_date, je_no, mapping, unmapped_accounts_seen)
+        diff = balance_je(recs, je_date, je_no, m, mapping, unmapped_accounts_seen)
+        if diff and adjustments is not None:
+            adjustments.append((m, diff))
+        all_records.extend(recs)
     return all_records
 
 
@@ -398,7 +424,9 @@ def build_total_records(ledger, mapping, unmapped_accounts_seen):
     year, mon = int(months[-1][:4]), int(months[-1][5:7])
     je_date = month_end(year, mon)
     items = [(typ, cat, g) for (typ, cat), g in combined.items()]
-    return emit_records(items, "Total", je_date, je_no, mapping, unmapped_accounts_seen)
+    recs = emit_records(items, "Total", je_date, je_no, mapping, unmapped_accounts_seen)
+    balance_je(recs, je_date, je_no, "Total", mapping, unmapped_accounts_seen)
+    return recs
 
 
 def build_qb_je_rows(monthly_records):
@@ -462,21 +490,21 @@ def reorder_debit_first(records):
 # Reconciliation
 # ---------------------------------------------------------------------------
 
-def digital_asset_period_totals(ledger, mapping, unmapped_accounts_seen):
-    combined, _months = combine_all_groups(ledger)
+def digital_asset_period_totals(monthly_records):
+    """Digital Asset debits/credits as actually posted in the monthly JEs
+    (including any balancing "Adjustment" lines)."""
     debit = credit = 0.0
-    for (typ, cat), g in combined.items():
-        for acct, d, c, memo in group_lines(typ, cat, g, "Total"):
-            if acct == DIGITAL_ASSETS:
-                debit += d
-                credit += c
+    for r in monthly_records:
+        if r["acct"] == DIGITAL_ASSETS:
+            debit += r["debit"]
+            credit += r["credit"]
     return round(debit, 2), round(credit, 2)
 
 
-def build_reconciliation(ledger, mapping, unmapped_accounts_seen, beginning, ending):
+def build_reconciliation(monthly_records, beginning, ending):
     """beginning/ending may be None (left blank) -- treated as 0.0, never
     blocking the report."""
-    debit, credit = digital_asset_period_totals(ledger, mapping, unmapped_accounts_seen)
+    debit, credit = digital_asset_period_totals(monthly_records)
     beginning = clean_num(beginning) if beginning not in (None, "") else 0.0
     ending = clean_num(ending) if ending not in (None, "") else 0.0
     calculated_ending = round(beginning + debit - credit, 2)
@@ -519,10 +547,11 @@ def process(files, mapping_file, beginning, ending):
         total_rows += len(rows)
         skipped_no_date += process_rows(rows, ledger, unmapped_types_seen)
 
-    monthly_records = build_monthly_records(ledger, mapping, unmapped_accounts_seen)
+    adjustments = []
+    monthly_records = build_monthly_records(ledger, mapping, unmapped_accounts_seen, adjustments)
     total_records = build_total_records(ledger, mapping, unmapped_accounts_seen)
     qb_rows = build_qb_je_rows(monthly_records)
-    reconciliation = build_reconciliation(ledger, mapping, unmapped_accounts_seen, beginning, ending)
+    reconciliation = build_reconciliation(monthly_records, beginning, ending)
 
     return {
         "monthly_records": monthly_records,
@@ -533,6 +562,7 @@ def process(files, mapping_file, beginning, ending):
         "unmapped_types": sorted(unmapped_types_seen),
         "unmapped_accounts": sorted(unmapped_accounts_seen),
         "blank_tag_review": dict(ledger.review),
+        "adjustments": adjustments,
         "total_transactions": total_rows,
         "skipped_no_date": skipped_no_date,
         "n_files": len(files),
