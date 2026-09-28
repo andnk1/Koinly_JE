@@ -490,30 +490,62 @@ def reorder_debit_first(records):
 # Reconciliation
 # ---------------------------------------------------------------------------
 
-def digital_asset_period_totals(monthly_records):
-    """Digital Asset debits/credits as actually posted in the monthly JEs
-    (including any balancing "Adjustment" lines)."""
+def account_period_totals(monthly_records, acct):
+    """Debits/credits posted to one built-in account (Digital Asset or Cash)
+    in the monthly JEs -- including any balancing "Adjustment" lines."""
     debit = credit = 0.0
     for r in monthly_records:
-        if r["acct"] == DIGITAL_ASSETS:
+        if r["acct"] == acct:
             debit += r["debit"]
             credit += r["credit"]
     return round(debit, 2), round(credit, 2)
 
 
+def digital_asset_period_totals(monthly_records):
+    return account_period_totals(monthly_records, DIGITAL_ASSETS)
+
+
+def _opening(beginning):
+    return clean_num(beginning) if beginning not in (None, "") else 0.0
+
+
+def monthly_running_balances(monthly_records, beginning):
+    """Month-end running balance per JE (je_no -> balance), using the same
+    formula as the reconciliation: Beginning + D Digital Asset - C Digital
+    Assets + D Cash - C Cash, accumulated month by month."""
+    balances = {}
+    running = _opening(beginning)
+    order = []
+    net = defaultdict(float)
+    for r in monthly_records:
+        if r["je_no"] not in net:
+            order.append(r["je_no"])
+            net[r["je_no"]] += 0.0
+        if r["acct"] in (DIGITAL_ASSETS, CASH):
+            net[r["je_no"]] += r["debit"] - r["credit"]
+    for je_no in order:
+        running = round(running + net[je_no], 2)
+        balances[je_no] = running
+    return balances
+
+
 def build_reconciliation(monthly_records, beginning, ending):
     """beginning/ending may be None (left blank) -- treated as 0.0, never
-    blocking the report."""
-    debit, credit = digital_asset_period_totals(monthly_records)
-    beginning = clean_num(beginning) if beginning not in (None, "") else 0.0
+    blocking the report. Cash (buy/sell/fiat deposit/withdrawal) is shown as
+    its own D/C lines and included in the calculated ending balance."""
+    debit, credit = account_period_totals(monthly_records, DIGITAL_ASSETS)
+    cash_debit, cash_credit = account_period_totals(monthly_records, CASH)
+    beginning = _opening(beginning)
     ending = clean_num(ending) if ending not in (None, "") else 0.0
-    calculated_ending = round(beginning + debit - credit, 2)
+    calculated_ending = round(beginning + debit - credit + cash_debit - cash_credit, 2)
     difference = round(ending - calculated_ending, 2)
     return {
         "beginning": beginning,
         "ending": ending,
         "debit": debit,
         "credit": credit,
+        "cash_debit": cash_debit,
+        "cash_credit": cash_credit,
         "calculated_ending": calculated_ending,
         "difference": difference,
     }
@@ -559,6 +591,7 @@ def process(files, mapping_file, beginning, ending):
         "total_records": total_records,
         "qb_rows": qb_rows,
         "reconciliation": reconciliation,
+        "monthly_balances": monthly_running_balances(monthly_records, beginning),
         "unmapped_types": sorted(unmapped_types_seen),
         "unmapped_accounts": sorted(unmapped_accounts_seen),
         "blank_tag_review": dict(ledger.review),

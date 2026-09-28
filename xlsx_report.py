@@ -62,7 +62,8 @@ def _autosize(ws, widths):
         ws.column_dimensions[get_column_letter(i)].width = w
 
 
-def _write_je_rows(ws, start_row, records, thin_after_group=False, thick_between_months=False):
+def _write_je_rows(ws, start_row, records, thin_after_group=False, thick_between_months=False,
+                   month_balances=None):
     """Writes JE_HEADER-shaped records starting at start_row. Optionally
     draws a thin rule after each (je_no, memo) group and a thicker rule
     between je_no (month) boundaries -- the thick rule wins where both would
@@ -79,10 +80,13 @@ def _write_je_rows(ws, start_row, records, thin_after_group=False, thick_between
 
         vals = [r["je_date"], r["je_no"], r["acct"], r["gl"],
                 r["debit"] or None, r["credit"] or None, r["memo"], r["name"]]
+        if month_balances is not None:
+            # Running balance shown once, on the last line of each month.
+            vals.append(month_balances.get(r["je_no"]) if is_last_of_month else None)
         for c, v in enumerate(vals, start=1):
             cell = ws.cell(row=row, column=c, value=v)
-            cell.font = BODY_FONT
-            if c in (5, 6) and v is not None:
+            cell.font = BOLD_FONT if c == 9 else BODY_FONT
+            if c in (5, 6, 9) and v is not None:
                 cell.number_format = MONEY_FMT
 
         if thick_between_months and is_last_of_month:
@@ -97,15 +101,18 @@ def _write_je_rows(ws, start_row, records, thin_after_group=False, thick_between
     return row
 
 
-def _add_je_sheet(wb, title, records, thin_after_group, thick_between_months):
+def _add_je_sheet(wb, title, records, thin_after_group, thick_between_months,
+                  month_balances=None):
     ws = wb.create_sheet(title)
     ws.sheet_view.showGridLines = False
-    for c, h in enumerate(JE_HEADER, start=1):
+    header = list(JE_HEADER) + (["Balance"] if month_balances is not None else [])
+    for c, h in enumerate(header, start=1):
         ws.cell(row=1, column=c, value=h)
-    _style_header_row(ws, 1, len(JE_HEADER))
+    _style_header_row(ws, 1, len(header))
     ws.freeze_panes = "A2"
-    next_row = _write_je_rows(ws, 2, records, thin_after_group, thick_between_months)
-    _autosize(ws, [12, 12, 22, 22, 13, 13, 34, 12])
+    next_row = _write_je_rows(ws, 2, records, thin_after_group, thick_between_months,
+                              month_balances)
+    _autosize(ws, [12, 12, 22, 22, 13, 13, 34, 12, 16])
     if not records:
         ws.cell(row=2, column=1, value="(no transactions in this period)").font = BODY_FONT
     return ws
@@ -129,6 +136,8 @@ def _add_reconciliation_sheet(wb, reconciliation):
         ("Beginning Balance", r["beginning"], r["beginning"]),
         ("D Digital Asset", None, r["debit"]),
         ("C Digital Assets", None, -r["credit"]),
+        ("D Cash", None, r.get("cash_debit", 0.0)),
+        ("C Cash", None, -r.get("cash_credit", 0.0)),
         ("Ending Balance", r["ending"], r["calculated_ending"]),
         ("", None, None),
         ("Difference", None, r["difference"]),
@@ -167,7 +176,8 @@ def build_workbook(engine_result):
 
     _add_reconciliation_sheet(wb, engine_result["reconciliation"])
     _add_je_sheet(wb, "JE by Month", engine_result["monthly_records_display"],
-                  thin_after_group=True, thick_between_months=True)
+                  thin_after_group=True, thick_between_months=True,
+                  month_balances=engine_result.get("monthly_balances", {}))
     _add_je_sheet(wb, "Total JE", engine_result["total_records"],
                   thin_after_group=False, thick_between_months=False)
 
