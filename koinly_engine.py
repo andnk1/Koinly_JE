@@ -115,6 +115,10 @@ def load_koinly_csv_bytes(filename, content_bytes):
             "Koinly CSV, not a re-saved or edited copy."
         )
     reader = csv.DictReader(lines[header_idx:])
+    # Some Koinly exports pad header names with spaces (e.g. " Net Value (USD) ");
+    # strip them so column lookups like "Net Value (USD)" always match.
+    if reader.fieldnames:
+        reader.fieldnames = [(f or "").strip() for f in reader.fieldnames]
     rows = list(reader)
     required = {"Date", "Type"}
     if rows and not required.issubset(set(rows[0].keys())):
@@ -125,6 +129,16 @@ def load_koinly_csv_bytes(filename, content_bytes):
     for r in rows:
         r["_source_file"] = filename
     return rows
+
+
+def koinly_columns(content_bytes):
+    """Original Koinly header columns, in file order (for the Transaction
+    History tab)."""
+    text = content_bytes.decode("utf-8-sig", errors="replace")
+    for line in text.splitlines():
+        if line.startswith("Date,"):
+            return [c.strip() for c in next(csv.reader([line]))]
+    return []
 
 
 def _find_columns(header_cells):
@@ -574,8 +588,14 @@ def process(files, mapping_file, beginning, ending):
     unmapped_accounts_seen = set()
     total_rows = 0
     skipped_no_date = 0
+    txn_rows = []
+    txn_columns = []
     for filename, content in files:
         rows = load_koinly_csv_bytes(filename, content)
+        for col in koinly_columns(content):
+            if col not in txn_columns:
+                txn_columns.append(col)
+        txn_rows.extend(rows)
         total_rows += len(rows)
         skipped_no_date += process_rows(rows, ledger, unmapped_types_seen)
 
@@ -596,6 +616,8 @@ def process(files, mapping_file, beginning, ending):
         "unmapped_accounts": sorted(unmapped_accounts_seen),
         "blank_tag_review": dict(ledger.review),
         "adjustments": adjustments,
+        "transactions": txn_rows,
+        "transaction_columns": txn_columns,
         "total_transactions": total_rows,
         "skipped_no_date": skipped_no_date,
         "n_files": len(files),

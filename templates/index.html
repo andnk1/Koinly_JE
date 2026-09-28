@@ -55,8 +55,14 @@
               </p>
             </div>
             <div class="mapping-download">
-              <a class="btn" href="{{ url_for('mapping_template') }}">Download mapping template (.csv)</a>
-              <p class="field-desc">Download, fill in the Account Name column, then upload it on the left.</p>
+              <a class="btn" href="{{ url_for('mapping_template') }}">Download default mapping (.csv)</a>
+              <p class="field-desc">
+                This is a <strong>default mapping</strong> &mdash; a suggested starting point only.
+                Before uploading it, change each <strong>Account Name</strong> to the
+                <strong>exact</strong> account name in your QuickBooks chart of accounts
+                (spelling and capitalization must match, or QuickBooks won't recognize it).
+                Replace placeholders like "Ask Client" with the real account.
+              </p>
             </div>
           </div>
         </div>
@@ -93,7 +99,7 @@
         <div class="cardbody">
           <button type="submit">Generate JE Report</button>
           <p class="field-desc">
-            Produces one Excel workbook (Reconciliation, JE by Month, and Total JE tabs)
+            Produces one Excel workbook (Reconciliation, JE by Month, Total JE and Transaction History tabs)
             plus a separate QB_JE.csv ready to import into QuickBooks.
           </p>
         </div>

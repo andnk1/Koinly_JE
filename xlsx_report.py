@@ -9,6 +9,8 @@ Builds the single 3-tab workbook the app hands back to the user:
                           thicker rule between months
     3. Total JE        -- the whole-period combined JE, plain (no separators,
                           natural line order -- matches JE_total.csv exactly)
+    4. Transaction History -- the raw Koinly rows, plus a Date2 column
+                          (mm-dd-yyyy, no time) after Date for filtering
 
 QB_JE.csv is intentionally NOT part of this workbook -- it stays a separate
 CSV download (that's the file that actually gets imported into QuickBooks,
@@ -18,6 +20,7 @@ Styled with the TaxPro UI kit's palette (navy / green / teal / grey) so it
 reads as an extension of the web app itself.
 """
 import io
+from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -168,6 +171,78 @@ def _add_reconciliation_sheet(wb, reconciliation):
     return ws
 
 
+def _parse_date(v):
+    v = (v or "").strip()
+    if len(v) < 10:
+        return None
+    try:
+        return datetime.strptime(v[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _maybe_number(v):
+    """Numeric-looking cells become real numbers so they can be summed and
+    filtered; everything else (IDs, tickers, text) is kept as-is."""
+    if v is None:
+        return None
+    t = str(v).strip()
+    if t == "":
+        return None
+    try:
+        if t.replace(",", "").lstrip("-").replace(".", "", 1).isdigit():
+            return float(t.replace(",", ""))
+    except ValueError:
+        pass
+    return t
+
+
+def _add_transactions_sheet(wb, rows, columns, multi_file):
+    """The raw Koinly transaction history, with a Date2 column (a real Excel
+    date formatted mm-dd-yyyy, no time) right after Date so it can be
+    filtered by day/month."""
+    ws = wb.create_sheet("Transaction History")
+    ws.sheet_view.showGridLines = False
+    header = []
+    for col in columns:
+        header.append(col)
+        if col == "Date":
+            header.append("Date2")
+    if multi_file:
+        header.append("Source File")
+    for c, h in enumerate(header, start=1):
+        ws.cell(row=1, column=c, value=h)
+    _style_header_row(ws, 1, len(header))
+    ws.freeze_panes = "A2"
+
+    text_cols = {"Date", "TxHash", "TxSrc", "TxDest", "Sending Wallet",
+                 "Receiving Wallet", "Description"}
+    for i, r in enumerate(rows, start=2):
+        c = 1
+        for col in columns:
+            v = r.get(col)
+            if col in text_cols or col.lower().endswith("currency"):
+                val = v if v not in (None, "") else None
+            else:
+                val = _maybe_number(v)
+            ws.cell(row=i, column=c, value=val).font = BODY_FONT
+            c += 1
+            if col == "Date":
+                d = _parse_date(v)
+                cell = ws.cell(row=i, column=c, value=d)
+                cell.font = BODY_FONT
+                cell.number_format = "mm-dd-yyyy"
+                c += 1
+        if multi_file:
+            ws.cell(row=i, column=c, value=r.get("_source_file")).font = BODY_FONT
+
+    if rows:
+        ws.auto_filter.ref = f"A1:{get_column_letter(len(header))}{len(rows) + 1}"
+    widths = [20 if h == "Date" else 12 if h == "Date2" else 16 for h in header]
+    _autosize(ws, widths)
+    return ws
+
+
 def build_workbook(engine_result):
     """engine_result: the dict returned by koinly_engine.process(). Returns
     raw .xlsx bytes."""
@@ -180,6 +255,9 @@ def build_workbook(engine_result):
                   month_balances=engine_result.get("monthly_balances", {}))
     _add_je_sheet(wb, "Total JE", engine_result["total_records"],
                   thin_after_group=False, thick_between_months=False)
+    _add_transactions_sheet(wb, engine_result.get("transactions", []),
+                            engine_result.get("transaction_columns", []),
+                            engine_result.get("n_files", 1) > 1)
 
     buf = io.BytesIO()
     wb.save(buf)
